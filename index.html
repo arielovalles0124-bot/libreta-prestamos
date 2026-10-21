@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Libreta de Préstamos</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230B7A5A'/%3E%3Cpath d='M9 8h14v3H9zM9 14h14v3H9zM9 20h9v3H9z' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+  /* Diseño: libreta de cobros. Resumen arriba en una sola banda, lista de préstamos como filas, números en mono. */
+  :root {
+    --bg: #F2F5F3;
+    --surface: #FFFFFF;
+    --surface-2: #E9EEEB;
+    --ink: #13201B;
+    --muted: #58675F;
+    --line: #D6DED9;
+    --gain: #0B7A5A;
+    --gain-bg: #DDF1E9;
+    --cap: #2A5DA8;
+    --cap-bg: #E1EAF7;
+    --warn: #8A5200;
+    --warn-bg: #FBEBCF;
+    --bad: #B02E26;
+    --bad-bg: #F9DEDB;
+    --focus: #1B6FD1;
+    --font-display: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+    --font-body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-num: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0E1613; --surface: #16211D; --surface-2: #1E2C27; --ink: #E6EFEA; --muted: #9AAEA5;
+      --line: #2B3B35; --gain: #4FD1A5; --gain-bg: #14352B; --cap: #7FAEF0; --cap-bg: #17283F;
+      --warn: #F0B35A; --warn-bg: #3A2A0E; --bad: #F08A80; --bad-bg: #40191A; --focus: #7FB4F5;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0E1613; --surface: #16211D; --surface-2: #1E2C27; --ink: #E6EFEA; --muted: #9AAEA5;
+    --line: #2B3B35; --gain: #4FD1A5; --gain-bg: #14352B; --cap: #7FAEF0; --cap-bg: #17283F;
+    --warn: #F0B35A; --warn-bg: #3A2A0E; --bad: #F08A80; --bad-bg: #40191A; --focus: #7FB4F5;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 var(--font-body);
+    padding-block: 20px 56px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+  h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; line-height: 1.15; }
+  h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
+  h2 { font-size: 20px; font-weight: 700; }
+  h3 { font-size: 16px; font-weight: 600; }
+  p { margin: 0; }
+  .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+  .lbl { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+  .hint { color: var(--muted); font-size: 14px; }
+
+  header.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+  .sync { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  .sync::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .sync[data-mode="cloud"]::before { background: var(--gain); }
+  .sync[data-mode="local"]::before { background: var(--warn); }
+
+  nav.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+  nav.tabs button {
+    font: 500 14px var(--font-body); color: var(--ink); background: transparent;
+    border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; cursor: pointer;
+  }
+  nav.tabs button[aria-current="page"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  .btn {
+    font: 600 14px var(--font-body); border-radius: 8px; padding: 10px 16px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  }
+  .btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .btn.small { padding: 7px 12px; font-size: 13px; }
+  .btn.danger { color: var(--bad); border-color: var(--bad); }
+  .btn.danger.armed { background: var(--bad); color: var(--surface); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Resumen */
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .summary > div { background: var(--surface); padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .summary strong { font-family: var(--font-num); font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .summary .gain strong { color: var(--gain); }
+  .summary .cap strong { color: var(--cap); }
+
+  /* Lista de préstamos */
+  .list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+  .loan { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; padding: 14px 16px; align-items: center; }
+  .loan + .loan { border-top: 1px solid var(--line); }
+  .loan-main { all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .loan-main:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; border-radius: 4px; }
+  .loan-name { font-family: var(--font-display); font-weight: 600; font-size: 17px; overflow-wrap: anywhere; }
+  .loan-sub { color: var(--muted); font-size: 13px; }
+  .loan-amt { text-align: right; display: flex; flex-direction: column; gap: 2px; }
+  .loan-amt strong { font-family: var(--font-num); font-weight: 500; font-size: 18px; font-variant-numeric: tabular-nums; }
+  .loan-foot { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
+
+  .pill { display: inline-block; font-size: 12.5px; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
+  .pill.ok { background: var(--gain-bg); color: var(--gain); }
+  .pill.warn { background: var(--warn-bg); color: var(--warn); }
+  .pill.bad { background: var(--bad-bg); color: var(--bad); }
+  .pill.done { background: var(--surface-2); color: var(--muted); }
+
+  /* Formularios */
+  form.card, .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .field label { font-weight: 500; font-size: 14px; }
+  input, select {
+    font: 400 16px var(--font-body); color: var(--ink); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; width: 100%; min-width: 0;
+  }
+  input.num { font-family: var(--font-num); }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
+  .preview { background: var(--surface-2); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+  .preview strong { font-family: var(--font-num); font-weight: 500; }
+  .row-between { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  /* Tablas */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+  tr:last-child td { border-bottom: 0; }
+  td.r, th.r { text-align: right; }
+  td.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+
+  /* Barras de ganancias */
+  .bars { display: flex; flex-direction: column; gap: 10px; }
+  .bar { display: grid; grid-template-columns: minmax(96px, 150px) minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+  .bar .track { height: 12px; background: var(--surface-2); border-radius: 6px; overflow: hidden; }
+  .bar .fill { height: 100%; background: var(--gain); border-radius: 6px; }
+  .bar .v { font-family: var(--font-num); font-size: 14px; text-align: right; }
+  @media (max-width: 480px) {
+    .bar { grid-template-columns: minmax(0, 1fr) auto; }
+    .bar .track { grid-column: 1 / -1; order: 3; }
+  }
+
+  .empty { background: var(--surface); border: 1px dashed var(--line); border-radius: 10px; padding: 28px 20px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+  .section-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 12px; }
+
+  #toast { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px max(16px, env(safe-area-inset-left, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)); display: flex; justify-content: center; pointer-events: none; }
+  #toast div { background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 14px; max-width: 480px; }
+  #toast div.err { background: var(--bad); color: var(--surface); }
+  @media (prefers-reduced-motion: no-preference) { #toast div { animation: up .18s ease-out; } @keyframes up { from { transform: translateY(8px); opacity: 0; } } }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<div id="toast" aria-live="polite"></div>
+
+<script>
+// <calc>
+const R2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
+const pad = n => String(n).padStart(2, '0');
+const toISO = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+const dateOf = iso => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); };
+const todayISO = () => toISO(new Date());
+const daysBetween = (a, b) => Math.round((dateOf(b) - dateOf(a)) / 864e5);
+function addPeriod(iso, freq) {
+  const [y, m, d] = iso.split('-').map(Number);
+  if (freq === 'semanal') return toISO(new Date(y, m - 1, d + 7));
+  if (freq === 'quincenal') return toISO(new Date(y, m - 1, d + 15));
+  const t = new Date(y, m, 1);
+  const last = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate();
+  t.setDate(Math.min(d, last));
+  return toISO(t);
+}
+function capitalActual(l) { return R2(l.capital - l.pagos.reduce((s, p) => s + p.capital, 0)); }
+function reditoPeriodo(l) { return R2(Math.max(capitalActual(l), 0) * l.tasa / 100); }
+function reditosCobrados(l) { return R2(l.pagos.reduce((s, p) => s + p.redito, 0)); }
+function proximoCobro(l) {
+  const base = l.pagos.length ? l.pagos.map(p => p.fecha).sort().pop() : l.fecha;
+  return addPeriod(base, l.frecuencia);
+}
+function gananciasPorMes(loans) {
+  const m = {};
+  loans.forEach(l => l.pagos.forEach(p => { const k = p.fecha.slice(0, 7); m[k] = R2((m[k] || 0) + p.redito); }));
+  return m;
+}
+// </calc>
+
+const FREQ = { semanal: 'semanal', quincenal: 'quincenal', mensual: 'mensual' };
+const money = n => 'RD$' + (Number(n) || 0).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fdate = iso => dateOf(iso).toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' });
+const monthLabel = key => { const [y, m] = key.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString('es-DO', { month: 'long', year: 'numeric' }); };
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const uid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '').slice(0, 20) : 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+
+let loans = [];
+let backend = null;
+const state = { view: 'inicio', detailId: null, payId: null, loaded: false, mode: 'connecting', armed: null };
+
+/* ---------- Almacenamiento ---------- */
+function normalize(id, d) {
+  const o = JSON.parse(JSON.stringify(d || {}));
+  return {
+    id: safeId(id) || uid(), nombre: String(o.nombre || '').slice(0, 80), capital: Number(o.capital) || 0, tasa: Number(o.tasa) || 0,
+    frecuencia: FREQ[o.frecuencia] ? o.frecuencia : 'mensual', fecha: isoOk(o.fecha) ? o.fecha : todayISO(),
+    saldado: !!o.saldado, creado: o.creado || 0,
+    pagos: Array.isArray(o.pagos) ? o.pagos.filter(p => p && isoOk(p.fecha)).map(p => ({ id: safeId(p.id) || uid(), fecha: p.fecha, redito: Number(p.redito) || 0, capital: Number(p.capital) || 0 })) : []
+  };
+}
+const bodyOf = l => ({
+  nombre: l.nombre, capital: l.capital, tasa: l.tasa, frecuencia: l.frecuencia, fecha: l.fecha,
+  saldado: l.saldado, creado: l.creado || Date.now(),
+  pagos: l.pagos.map(p => ({ id: p.id, fecha: p.fecha, redito: p.redito, capital: p.capital }))
+});
+
+function makeCloud(coll) {
+  const chains = new Map();
+  const queue = (id, fn) => { const p = (chains.get(id) || Promise.resolve()).catch(() => {}).then(fn); chains.set(id, p); return p; };
+  return {
+    newId: () => coll.doc().id,
+    save: l => queue(l.id, () => coll.doc(l.id).set(bodyOf(l))),
+    remove: id => queue(id, () => coll.doc(id).delete())
+  };
+}
+function makeLocal() {
+  const KEY = 'libreta-prestamos-v1';
+  try { loans = JSON.parse(localStorage.getItem(KEY) || '[]').map(l => normalize(l.id, l)); } catch (e) { loans = []; }
+  const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(loans)); } catch (e) {} };
+  return { newId: uid, save: async () => persist(), remove: async () => persist() };
+}
+
+async function init() {
+  render();
+  let db = null, user = null, id = null;
+  try { if (window.claude && claude.use) { [db, user] = await Promise.all([claude.use('db'), claude.use('user')]); } } catch (e) {}
+  try { id = user ? await user.id() : null; } catch (e) {}
+  if (db && id) {
+    try {
+      const coll = db.doc('data/users/' + id + '/profile').collection('prestamos');
+      backend = makeCloud(coll);
+      state.mode = 'cloud';
+      coll.onSnapshot(snap => {
+        loans = snap.docs.map(d => normalize(d.id, d.data()));
+        const first = !state.loaded;
+        state.loaded = true;
+        if (first || !['nuevo', 'pago'].includes(state.view)) render();
+      }, () => { state.mode = 'error'; render(); });
+      return;
+    } catch (e) {}
+  }
+  backend = makeLocal();
+  state.mode = 'local';
+  state.loaded = true;
+  render();
+}
+
+async function saveLoan(l, msg) {
+  const i = loans.findIndex(x => x.id === l.id);
+  if (i >= 0) loans[i] = l; else loans.push(l);
+  try { await backend.save(l); if (msg) toast(msg); } catch (e) { toast('No se pudo guardar. Intenta de nuevo.', true); }
+}
+async function removeLoan(id) {
+  loans = loans.filter(l => l.id !== id);
+  try { await backend.remove(id); toast('Préstamo eliminado.'); } catch (e) { toast('No se pudo eliminar. Intenta de nuevo.', true); }
+}
+
+/* ---------- Vistas ---------- */
+const syncText = { connecting: 'Conectando…', cloud: 'Guardado en tu cuenta', local: 'Guardado solo en este navegador', error: 'Sin sincronizar' };
+
+function dueInfo(l) {
+  if (l.saldado) return { cls: 'done', text: 'Saldado' };
+  const due = proximoCobro(l);
+  const diff = daysBetween(todayISO(), due);
+  if (diff < 0) return { cls: 'bad', text: 'Atrasado ' + (-diff) + (diff === -1 ? ' día' : ' días'), due };
+  if (diff === 0) return { cls: 'warn', text: 'Cobra hoy', due };
+  if (diff <= 3) return { cls: 'warn', text: 'Cobra en ' + diff + (diff === 1 ? ' día' : ' días'), due };
+  return { cls: 'ok', text: 'Al día', due };
+}
+
+function vInicioBase() {
+  if (!state.loaded) return '<div class="empty"><p class="hint">Cargando tus préstamos…</p></div>';
+  const activos = loans.filter(l => !l.saldado).sort((a, b) => proximoCobro(a).localeCompare(proximoCobro(b)));
+  const saldados = loans.filter(l => l.saldado);
+  const mesActual = todayISO().slice(0, 7);
+  const enCalle = R2(activos.reduce((s, l) => s + Math.max(capitalActual(l), 0), 0));
+  const total = R2(loans.reduce((s, l) => s + reditosCobrados(l), 0));
+  const delMes = gananciasPorMes(loans)[mesActual] || 0;
+
+  const resumen = `<section class="summary" aria-label="Resumen">
+    <div class="cap"><span class="lbl">Capital en la calle</span><strong>${money(enCalle)}</strong></div>
+    <div class="gain"><span class="lbl">Ganancias cobradas</span><strong>${money(total)}</strong></div>
+    <div class="gain"><span class="lbl">Ganancias de este mes</span><strong>${money(delMes)}</strong></div>
+  </section>`;
+
+  if (!loans.length) {
+    return resumen + `<div class="empty">
+      <h2>Aún no tienes préstamos</h2>
+      <p class="hint">Registra el primero y la libreta calculará los réditos, el capital pendiente y tus ganancias.</p>
+      <div class="actions"><button class="btn primary" data-act="go" data-view="nuevo">Registrar primer préstamo</button>
+      <button class="btn" data-act="demo">Cargar 2 ejemplos</button></div>
+    </div>`;
+  }
+
+  const fila = l => {
+    const d = dueInfo(l);
+    return `<article class="loan">
+      <button class="loan-main" data-act="open" data-id="${l.id}">
+        <span class="loan-name">${esc(l.nombre)}</span>
+        <span class="loan-sub">${l.tasa}% ${l.frecuencia} · desde ${fdate(l.fecha)}</span>
+      </button>
+      <div class="loan-amt"><span class="lbl">Debe</span><strong>${money(capitalActual(l))}</strong></div>
+      <div class="loan-foot">
+        <span><span class="pill ${d.cls}">${d.text}</span> <span class="hint">${d.due ? 'Próximo cobro: ' + fdate(d.due) : ''}</span></span>
+        <span class="hint">Rédito por período: <span class="num">${money(reditoPeriodo(l))}</span></span>
+        <button class="btn small" data-act="pay" data-id="${l.id}">Registrar pago</button>
+      </div>
+    </article>`;
+  };
+
+  let html = resumen;
+  html += `<div class="section-head"><h2>Préstamos activos</h2><span class="hint">${activos.length} ${activos.length === 1 ? 'cliente' : 'clientes'}</span></div>`;
+  html += activos.length ? `<div class="list">${activos.map(fila).join('')}</div>` : '<p class="hint">No tienes préstamos activos.</p>';
+  if (saldados.length) {
+    html += `<div class="section-head"><h2>Saldados</h2></div><div class="list">${saldados.map(l => `<article class="loan">
+      <button class="loan-main" data-act="open" data-id="${l.id}"><span class="loan-name">${esc(l.nombre)}</span>
+      <span class="loan-sub">${money(l.capital)} al ${l.tasa}% ${l.frecuencia}</span></button>
+      <div class="loan-amt"><span class="lbl">Réditos cobrados</span><strong>${money(reditosCobrados(l))}</strong></div></article>`).join('')}</div>`;
+  }
+  return html;
+}
+
+const LAST_KEY = 'libreta-prestamos-ultimo-respaldo';
+const safeId = v => String(v == null ? '' : v).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
+const isoOk = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !isNaN(dateOf(v));
+
+function backupCard() {
+  let last = null;
+  try { last = localStorage.getItem(LAST_KEY); } catch (e) {}
+  const aviso = loans.length && !last ? '<span class="pill warn">Aún no has descargado un respaldo</span>' : '';
+  return `<section class="card" aria-label="Respaldo">
+    <div class="row-between"><h3>Respaldo de tus datos</h3>${aviso}</div>
+    <p class="hint">Tus préstamos se guardan solos en este navegador. Descarga un respaldo para no perderlos si borras los datos del navegador o cambias de teléfono.${last && isoOk(last) ? ' Último respaldo: ' + esc(fdate(last)) + '.' : ''}</p>
+    <div class="actions">
+      <button class="btn primary" data-act="backup-save">Descargar respaldo</button>
+      <button class="btn" data-act="backup-load">Cargar respaldo</button>
+    </div>
+    <input type="file" id="b-file" accept=".json,application/json" hidden>
+  </section>`;
+}
+function vInicio() { return vInicioBase() + (state.loaded ? backupCard() : ''); }
+
+function descargarRespaldo() {
+  const data = { app: 'libreta-prestamos', version: 1, exportado: new Date().toISOString(), prestamos: loans.map(l => ({ id: l.id, ...bodyOf(l) })) };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'respaldo-libreta-' + todayISO() + '.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  try { localStorage.setItem(LAST_KEY, todayISO()); } catch (e) {}
+  toast('Respaldo descargado: ' + loans.length + (loans.length === 1 ? ' préstamo.' : ' préstamos.'));
+  render();
+}
+async function cargarRespaldo(file) {
+  if (!file) return;
+  let data;
+  try { data = JSON.parse(await file.text()); } catch (e) { toast('El archivo no es un respaldo válido.', true); return; }
+  const arr = data && data.app === 'libreta-prestamos' && Array.isArray(data.prestamos) ? data.prestamos : null;
+  if (!arr) { toast('Ese archivo no es un respaldo de la Libreta de Préstamos.', true); return; }
+  let n = 0;
+  for (const raw of arr) {
+    if (!raw || typeof raw !== 'object') continue;
+    const l = normalize(raw.id, raw);
+    if (!l.nombre.trim() || !(l.capital > 0)) continue;
+    await saveLoan(l); n++;
+  }
+  render();
+  toast(n ? n + (n === 1 ? ' préstamo cargado.' : ' préstamos cargados.') : 'El respaldo no tenía préstamos válidos.', !n);
+}
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  if (el.dataset.act === 'backup-save') descargarRespaldo();
+  else if (el.dataset.act === 'backup-load') { const f = document.getElementById('b-file'); if (f) f.click(); }
+});
+document.addEventListener('change', e => {
+  if (e.target.id === 'b-file') { const f = e.target.files && e.target.files[0]; e.target.value = ''; cargarRespaldo(f); }
+});
+
+function vNuevo() {
+  return `<form class="card" id="f-nuevo" autocomplete="off">
+    <h2>Nuevo préstamo</h2>
+    <div class="field"><label for="n-nombre">Nombre del cliente</label><input id="n-nombre" name="nombre" required maxlength="80" placeholder="Ej. Juan Pérez"></div>
+    <div class="grid2">
+      <div class="field"><label for="n-monto">Monto prestado (RD$)</label><input class="num" id="n-monto" name="monto" type="number" inputmode="decimal" step="0.01" min="0.01" required placeholder="10000"></div>
+      <div class="field"><label for="n-tasa">Tasa de interés por período (%)</label><input class="num" id="n-tasa" name="tasa" type="number" inputmode="decimal" step="0.01" min="0" required placeholder="10"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label for="n-freq">Cada cuánto paga</label>
+        <select id="n-freq" name="frecuencia"><option value="mensual">Mensual</option><option value="quincenal">Quincenal</option><option value="semanal">Semanal</option></select></div>
+      <div class="field"><label for="n-fecha">Fecha del préstamo</label><input id="n-fecha" name="fecha" type="date" required value="${todayISO()}"></div>
+    </div>
+    <div class="preview" id="n-preview"><span class="hint">Escribe el monto y la tasa para ver cuánto rédito genera cada período.</span></div>
+    <div><button class="btn primary" type="submit">Guardar préstamo</button></div>
+  </form>`;
+}
+
+function vPago() {
+  const activos = loans.filter(l => !l.saldado);
+  if (!state.loaded) return '<div class="empty"><p class="hint">Cargando…</p></div>';
+  if (!activos.length) return `<div class="empty"><h2>No hay préstamos activos</h2><p class="hint">Registra un préstamo primero para poder anotar pagos.</p>
+    <button class="btn primary" data-act="go" data-view="nuevo">Nuevo préstamo</button></div>`;
+  const sel = activos.find(l => l.id === state.payId) || activos[0];
+  state.payId = sel.id;
+  return `<form class="card" id="f-pago" autocomplete="off">
+    <h2>Registrar pago</h2>
+    <div class="field"><label for="p-prestamo">Cliente</label>
+      <select id="p-prestamo" name="prestamo">${activos.map(l => `<option value="${l.id}"${l.id === sel.id ? ' selected' : ''}>${esc(l.nombre)} · debe ${money(capitalActual(l))}</option>`).join('')}</select></div>
+    <div class="field"><label for="p-fecha">Fecha del pago</label><input id="p-fecha" name="fecha" type="date" required value="${todayISO()}"></div>
+    <div class="grid2">
+      <div class="field"><label for="p-redito">Parte que es rédito (ganancia)</label><input class="num" id="p-redito" name="redito" type="number" inputmode="decimal" step="0.01" min="0" value="${reditoPeriodo(sel)}"></div>
+      <div class="field"><label for="p-capital">Parte que abona al capital</label><input class="num" id="p-capital" name="capital" type="number" inputmode="decimal" step="0.01" min="0" value="0"></div>
+    </div>
+    <div class="preview" id="p-preview"></div>
+    <div><button class="btn primary" type="submit">Guardar pago</button></div>
+  </form>`;
+}
+
+function vDetalle() {
+  const l = loans.find(x => x.id === state.detailId);
+  if (!l) return '<div class="empty"><p class="hint">Este préstamo ya no existe.</p><button class="btn" data-act="go" data-view="inicio">Volver al inicio</button></div>';
+  const d = dueInfo(l);
+  const pagos = l.pagos.slice().sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const armedLoan = state.armed === 'loan:' + l.id;
+  return `<div class="section-head"><button class="btn small" data-act="go" data-view="inicio">← Volver</button><span class="pill ${d.cls}">${d.text}</span></div>
+  <div>
+    <h2>${esc(l.nombre)}</h2>
+    <p class="hint">${money(l.capital)} al ${l.tasa}% ${l.frecuencia} · desde ${fdate(l.fecha)}</p>
+  </div>
+  <section class="summary">
+    <div class="cap"><span class="lbl">Capital que debe</span><strong>${money(capitalActual(l))}</strong></div>
+    <div class="gain"><span class="lbl">Réditos cobrados</span><strong>${money(reditosCobrados(l))}</strong></div>
+    <div><span class="lbl">Rédito por período</span><strong>${money(reditoPeriodo(l))}</strong></div>
+    <div><span class="lbl">Próximo cobro</span><strong style="font-size:18px">${l.saldado ? '—' : fdate(d.due)}</strong></div>
+  </section>
+  <div class="actions">
+    ${l.saldado ? '' : `<button class="btn primary" data-act="pay" data-id="${l.id}">Registrar pago</button>`}
+    <button class="btn" data-act="toggle-saldado" data-id="${l.id}">${l.saldado ? 'Reabrir préstamo' : 'Marcar como saldado'}</button>
+    <button class="btn danger${armedLoan ? ' armed' : ''}" data-act="del-loan" data-id="${l.id}">${armedLoan ? 'Toca otra vez para eliminar' : 'Eliminar préstamo'}</button>
+  </div>
+  <div class="section-head"><h3>Historial de pagos</h3><span class="hint">${pagos.length} ${pagos.length === 1 ? 'pago' : 'pagos'}</span></div>
+  ${pagos.length ? `<div class="tablewrap"><table>
+    <thead><tr><th>Fecha</th><th class="r">Rédito</th><th class="r">Capital</th><th class="r">Total</th><th></th></tr></thead>
+    <tbody>${pagos.map(p => { const a = state.armed === 'pago:' + p.id; return `<tr>
+      <td>${fdate(p.fecha)}</td><td class="r num">${money(p.redito)}</td><td class="r num">${money(p.capital)}</td><td class="r num">${money(R2(p.redito + p.capital))}</td>
+      <td class="r"><button class="btn small danger${a ? ' armed' : ''}" data-act="del-pago" data-id="${l.id}" data-pago="${p.id}">${a ? 'Confirmar' : 'Borrar'}</button></td></tr>`; }).join('')}</tbody>
+  </table></div>` : '<p class="hint">Todavía no hay pagos registrados para este préstamo.</p>'}`;
+}
+
+function vGanancias() {
+  if (!state.loaded) return '<div class="empty"><p class="hint">Cargando…</p></div>';
+  const meses = gananciasPorMes(loans);
+  const keys = Object.keys(meses).sort().reverse();
+  const maxM = Math.max(1, ...keys.map(k => meses[k]));
+  const total = R2(keys.reduce((s, k) => s + meses[k], 0));
+  const clientes = {};
+  loans.forEach(l => {
+    const k = l.nombre.trim().toLowerCase();
+    const c = clientes[k] || (clientes[k] = { nombre: l.nombre.trim(), redito: 0, deuda: 0 });
+    c.redito = R2(c.redito + reditosCobrados(l));
+    if (!l.saldado) c.deuda = R2(c.deuda + Math.max(capitalActual(l), 0));
+  });
+  const lista = Object.values(clientes).sort((a, b) => b.redito - a.redito);
+  const maxC = Math.max(1, ...lista.map(c => c.redito));
+  if (!loans.length) return '<div class="empty"><h2>Sin ganancias todavía</h2><p class="hint">Cuando registres pagos, aquí verás lo que has ganado por mes y por cliente.</p></div>';
+  return `<section class="summary"><div class="gain"><span class="lbl">Ganancias cobradas en total</span><strong>${money(total)}</strong></div></section>
+  <div class="section-head"><h2>Por mes</h2></div>
+  ${keys.length ? `<div class="card"><div class="bars">${keys.map(k => `<div class="bar"><span>${esc(monthLabel(k))}</span><div class="track"><div class="fill" style="width:${Math.max(2, meses[k] / maxM * 100)}%"></div></div><span class="v">${money(meses[k])}</span></div>`).join('')}</div></div>` : '<p class="hint">Aún no hay pagos con rédito.</p>'}
+  <div class="section-head"><h2>Por cliente</h2></div>
+  <div class="tablewrap"><table><thead><tr><th>Cliente</th><th class="r">Réditos cobrados</th><th class="r">Capital que debe</th></tr></thead>
+  <tbody>${lista.map(c => `<tr><td>${esc(c.nombre)}</td><td class="r num">${money(c.redito)}</td><td class="r num">${money(c.deuda)}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
+const TABS = [['inicio', 'Inicio'], ['nuevo', 'Nuevo préstamo'], ['pago', 'Registrar pago'], ['ganancias', 'Ganancias']];
+function render() {
+  const app = document.getElementById('app');
+  const v = state.view;
+  const body = v === 'inicio' ? vInicio() : v === 'nuevo' ? vNuevo() : v === 'pago' ? vPago() : v === 'detalle' ? vDetalle() : vGanancias();
+  app.innerHTML = `<header class="top"><h1>Libreta de Préstamos</h1><span class="sync" data-mode="${state.mode}">${syncText[state.mode]}</span></header>
+    <nav class="tabs" aria-label="Secciones">${TABS.map(([k, t]) => `<button data-act="go" data-view="${k}"${(v === k || (v === 'detalle' && k === 'inicio')) ? ' aria-current="page"' : ''}>${t}</button>`).join('')}</nav>
+    ${body}`;
+  if (v === 'pago') updatePagoPreview();
+}
+
+/* ---------- Avisos y vistas previas ---------- */
+let toastTimer;
+function toast(msg, err) {
+  const t = document.getElementById('toast');
+  t.innerHTML = '';
+  const d = document.createElement('div');
+  if (err) d.className = 'err';
+  d.textContent = msg;
+  t.appendChild(d);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.innerHTML = ''; }, 3500);
+}
+function updateNuevoPreview() {
+  const m = parseFloat(document.getElementById('n-monto').value);
+  const t = parseFloat(document.getElementById('n-tasa').value);
+  const f = document.getElementById('n-freq').value;
+  const box = document.getElementById('n-preview');
+  if (!(m > 0) || !(t >= 0)) { box.innerHTML = '<span class="hint">Escribe el monto y la tasa para ver cuánto rédito genera cada período.</span>'; return; }
+  box.innerHTML = `<span>Rédito por cada pago ${f}: <strong>${money(R2(m * t / 100))}</strong></span>`;
+}
+function updatePagoPreview() {
+  const form = document.getElementById('f-pago');
+  if (!form) return;
+  const l = loans.find(x => x.id === document.getElementById('p-prestamo').value);
+  if (!l) return;
+  const r = parseFloat(document.getElementById('p-redito').value) || 0;
+  const c = parseFloat(document.getElementById('p-capital').value) || 0;
+  const resta = R2(capitalActual(l) - c);
+  const over = resta < 0;
+  document.getElementById('p-preview').innerHTML = `
+    <span>Rédito sugerido para este período: <strong>${money(reditoPeriodo(l))}</strong></span>
+    <span>Total que recibes: <strong>${money(R2(r + c))}</strong></span>
+    <span>${over ? '<span class="pill bad">El abono es mayor que lo que debe</span>' : 'Capital que quedará debiendo: <strong>' + money(resta) + '</strong>'}</span>`;
+}
+
+/* ---------- Eventos ---------- */
+document.addEventListener('click', async e => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  const act = el.dataset.act, id = el.dataset.id;
+  if (act === 'go') { state.view = el.dataset.view; state.armed = null; render(); }
+  else if (act === 'open') { state.detailId = id; state.view = 'detalle'; state.armed = null; render(); }
+  else if (act === 'pay') { state.payId = id; state.view = 'pago'; state.armed = null; render(); }
+  else if (act === 'toggle-saldado') {
+    const l = loans.find(x => x.id === id); if (!l) return;
+    await saveLoan({ ...l, saldado: !l.saldado }, l.saldado ? 'Préstamo reabierto.' : 'Préstamo marcado como saldado.');
+    render();
+  }
+  else if (act === 'del-loan') {
+    if (state.armed !== 'loan:' + id) { state.armed = 'loan:' + id; render(); return; }
+    state.armed = null; state.view = 'inicio'; render();
+    await removeLoan(id); render();
+  }
+  else if (act === 'del-pago') {
+    const key = 'pago:' + el.dataset.pago;
+    if (state.armed !== key) { state.armed = key; render(); return; }
+    const l = loans.find(x => x.id === id); if (!l) return;
+    state.armed = null;
+    const pagos = l.pagos.filter(p => p.id !== el.dataset.pago);
+    const nl = { ...l, pagos };
+    nl.saldado = capitalActual(nl) <= 0.005 && pagos.length > 0;
+    await saveLoan(nl, 'Pago borrado.'); render();
+  }
+  else if (act === 'demo') {
+    const ago = n => { const d = new Date(); d.setDate(d.getDate() - n); return toISO(d); };
+    const a = { id: backend.newId(), nombre: '(Ejemplo) Juan Pérez', capital: 10000, tasa: 10, frecuencia: 'mensual', fecha: ago(45), saldado: false, creado: Date.now(),
+      pagos: [{ id: uid(), fecha: ago(15), redito: 1000, capital: 2000 }] };
+    const b = { id: backend.newId(), nombre: '(Ejemplo) María Rosario', capital: 5000, tasa: 5, frecuencia: 'quincenal', fecha: ago(20), saldado: false, creado: Date.now(), pagos: [] };
+    await saveLoan(a); await saveLoan(b, 'Ejemplos cargados. Puedes eliminarlos desde su detalle.'); render();
+  }
+});
+
+document.addEventListener('input', e => {
+  if (e.target.closest('#f-nuevo')) updateNuevoPreview();
+  if (e.target.closest('#f-pago')) updatePagoPreview();
+});
+document.addEventListener('change', e => {
+  if (e.target.id === 'p-prestamo') {
+    const l = loans.find(x => x.id === e.target.value);
+    if (l) { state.payId = l.id; document.getElementById('p-redito').value = reditoPeriodo(l); document.getElementById('p-capital').value = 0; updatePagoPreview(); }
+  }
+  if (e.target.closest('#f-nuevo')) updateNuevoPreview();
+});
+
+document.addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!backend) { toast('Aún se está conectando. Espera un momento.', true); return; }
+  const f = e.target;
+  if (f.id === 'f-nuevo') {
+    const nombre = f.nombre.value.trim();
+    const capital = R2(parseFloat(f.monto.value));
+    const tasa = parseFloat(f.tasa.value);
+    if (!nombre || !(capital > 0) || !(tasa >= 0) || !f.fecha.value) { toast('Revisa los datos: nombre, monto y tasa son obligatorios.', true); return; }
+    const l = { id: backend.newId(), nombre, capital, tasa, frecuencia: f.frecuencia.value, fecha: f.fecha.value, saldado: false, creado: Date.now(), pagos: [] };
+    state.view = 'inicio'; render();
+    await saveLoan(l, 'Préstamo guardado.'); render();
+  } else if (f.id === 'f-pago') {
+    const l = loans.find(x => x.id === f.prestamo.value);
+    if (!l) return;
+    const redito = R2(parseFloat(f.redito.value) || 0);
+    const capital = R2(parseFloat(f.capital.value) || 0);
+    if (redito < 0 || capital < 0 || redito + capital <= 0) { toast('Escribe cuánto fue rédito y cuánto fue capital.', true); return; }
+    if (capital > capitalActual(l) + 0.005) { toast('El abono al capital es mayor que lo que debe el cliente.', true); return; }
+    const nl = { ...l, pagos: [...l.pagos, { id: uid(), fecha: f.fecha.value, redito, capital }] };
+    const saldado = capitalActual(nl) <= 0.005;
+    nl.saldado = saldado;
+    state.detailId = l.id; state.view = 'detalle'; render();
+    await saveLoan(nl, saldado ? 'Pago guardado. El préstamo quedó saldado.' : 'Pago guardado.'); render();
+  }
+});
+
+init();
+</script>
+</body>
+</html>

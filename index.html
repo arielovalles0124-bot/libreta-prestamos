@@ -217,7 +217,7 @@ let sb = null;
 let channel = null;
 let entrando = false;
 const state = {
-  view: 'inicio', detailId: null, payId: null, ready: false, loaded: false, loadError: false,
+  view: 'inicio', detailId: null, payId: null, editId: null, ready: false, loaded: false, loadError: false,
   session: null, armed: null, authError: '', busy: false, conn: 'ok', userTyped: '', fatal: ''
 };
 
@@ -299,6 +299,18 @@ async function crearPrestamo(d) {
   const r = await dbRun(() => sb.from('prestamos').insert({ nombre: d.nombre, capital: d.capital, tasa: d.tasa, frecuencia: d.frecuencia, fecha: d.fecha }).select().single());
   if (!r || !r.data) return false;
   loans.push({ id: r.data.id, nombre: d.nombre, capital: d.capital, tasa: d.tasa, frecuencia: d.frecuencia, fecha: d.fecha, saldado: false, creado: r.data.creado || '', pagos: [] });
+  return true;
+}
+async function editarPrestamo(l, d) {
+  const cambioCapital = d.capital !== l.capital;
+  const campos = { nombre: d.nombre, capital: d.capital, tasa: d.tasa, frecuencia: d.frecuencia, fecha: d.fecha };
+  const copia = { ...l, ...campos };
+  let saldado = l.saldado;
+  if (cambioCapital) saldado = capitalActual(copia) <= 0.005 && l.pagos.length > 0;
+  campos.saldado = saldado;
+  const r = await dbRun(() => sb.from('prestamos').update(campos).eq('id', l.id));
+  if (!r) return false;
+  Object.assign(l, campos);
   return true;
 }
 async function actualizarSaldado(l, saldado) {
@@ -442,6 +454,30 @@ function vNuevo() {
   </form>`;
 }
 
+function vEditar() {
+  const l = loans.find(x => x.id === state.editId);
+  if (!l) return '<div class="empty"><p class="hint">Este préstamo ya no existe.</p><button class="btn" data-act="go" data-view="inicio">Volver al inicio</button></div>';
+  const pagadoCapital = R2(l.pagos.reduce((s, p) => s + p.capital, 0));
+  const opt = v => `<option value="${v}"${l.frecuencia === v ? ' selected' : ''}>${v.charAt(0).toUpperCase() + v.slice(1)}</option>`;
+  return `<form class="card" id="f-editar" autocomplete="off">
+    <h2>Editar préstamo</h2>
+    <p class="hint">${l.pagos.length ? 'Este préstamo tiene ' + l.pagos.length + (l.pagos.length === 1 ? ' pago registrado' : ' pagos registrados') + '. Los pagos no cambian; el capital que debe se vuelve a calcular con el monto nuevo.' : 'Este préstamo todavía no tiene pagos.'}</p>
+    <div class="field"><label for="n-nombre">Nombre del cliente</label><input id="n-nombre" name="nombre" required maxlength="80" value="${esc(l.nombre)}"></div>
+    <div class="grid2">
+      <div class="field"><label for="n-monto">Monto prestado (RD$)</label><input class="num" id="n-monto" name="monto" type="number" inputmode="decimal" step="0.01" min="${pagadoCapital > 0 ? pagadoCapital : 0.01}" required value="${l.capital}"></div>
+      <div class="field"><label for="n-tasa">Tasa de interés por período (%)</label><input class="num" id="n-tasa" name="tasa" type="number" inputmode="decimal" step="0.01" min="0" required value="${l.tasa}"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label for="n-freq">Cada cuánto paga</label>
+        <select id="n-freq" name="frecuencia">${opt('mensual')}${opt('quincenal')}${opt('semanal')}</select></div>
+      <div class="field"><label for="n-fecha">Fecha del préstamo</label><input id="n-fecha" name="fecha" type="date" required value="${esc(l.fecha)}"></div>
+    </div>
+    <div class="preview" id="n-preview"></div>
+    <div class="actions"><button class="btn primary" type="submit">Guardar cambios</button>
+      <button class="btn" type="button" data-act="open" data-id="${esc(l.id)}">Cancelar</button></div>
+  </form>`;
+}
+
 function vPago() {
   const activos = loans.filter(l => !l.saldado);
   if (!state.loaded) return '<div class="empty"><p class="hint">Cargando…</p></div>';
@@ -482,6 +518,7 @@ function vDetalle() {
   </section>
   <div class="actions">
     ${l.saldado ? '' : `<button class="btn primary" data-act="pay" data-id="${esc(l.id)}">Registrar pago</button>`}
+    <button class="btn" data-act="edit" data-id="${esc(l.id)}">Editar préstamo</button>
     <button class="btn" data-act="toggle-saldado" data-id="${esc(l.id)}">${l.saldado ? 'Reabrir préstamo' : 'Marcar como saldado'}</button>
     <button class="btn danger${armedLoan ? ' armed' : ''}" data-act="del-loan" data-id="${esc(l.id)}">${armedLoan ? 'Toca otra vez para eliminar' : 'Eliminar préstamo'}</button>
   </div>
@@ -525,14 +562,15 @@ function render() {
   if (!state.ready) { app.innerHTML = '<div class="empty"><p class="hint">Cargando…</p></div>'; return; }
   if (!state.session) { app.innerHTML = vLogin(); return; }
   const v = state.view;
-  const body = v === 'inicio' ? vInicio() : v === 'nuevo' ? vNuevo() : v === 'pago' ? vPago() : v === 'detalle' ? vDetalle() : vGanancias();
+  const body = v === 'inicio' ? vInicio() : v === 'nuevo' ? vNuevo() : v === 'pago' ? vPago() : v === 'detalle' ? vDetalle() : v === 'editar' ? vEditar() : vGanancias();
   const quien = nombreVisible(state.session.user && state.session.user.email);
   app.innerHTML = `<header class="top"><h1>Libreta de Préstamos</h1>
       <span class="who"><span class="sync" data-mode="${state.conn === 'ok' ? 'cloud' : 'error'}">${syncText[state.conn]}</span>
       <span class="chip">${esc(quien)}</span><button class="btn small" data-act="logout">Salir</button></span></header>
-    <nav class="tabs" aria-label="Secciones">${TABS.map(([k, t]) => `<button data-act="go" data-view="${k}"${(v === k || (v === 'detalle' && k === 'inicio')) ? ' aria-current="page"' : ''}>${t}</button>`).join('')}</nav>
+    <nav class="tabs" aria-label="Secciones">${TABS.map(([k, t]) => `<button data-act="go" data-view="${k}"${(v === k || ((v === 'detalle' || v === 'editar') && k === 'inicio')) ? ' aria-current="page"' : ''}>${t}</button>`).join('')}</nav>
     ${body}`;
   if (v === 'pago') updatePagoPreview();
+  if (v === 'editar') updateNuevoPreview();
 }
 
 /* ---------- Avisos y vistas previas ---------- */
@@ -552,8 +590,11 @@ function updateNuevoPreview() {
   const t = parseFloat(document.getElementById('n-tasa').value);
   const f = document.getElementById('n-freq').value;
   const box = document.getElementById('n-preview');
-  if (!(m > 0) || !(t >= 0)) { box.innerHTML = '<span class="hint">Escribe el monto y la tasa para ver cuánto rédito genera cada período.</span>'; return; }
-  box.innerHTML = `<span>Rédito por cada pago ${f}: <strong>${money(R2(m * t / 100))}</strong></span>`;
+  const fe = document.getElementById('n-fecha');
+  const futura = fe && isoOk(fe.value) && fe.value > todayISO();
+  const aviso = futura ? '<span class="pill warn">La fecha es futura. Revisa que sea correcta.</span>' : '';
+  if (!(m > 0) || !(t >= 0)) { box.innerHTML = '<span class="hint">Escribe el monto y la tasa para ver cuánto rédito genera cada período.</span>' + aviso; return; }
+  box.innerHTML = `<span>Rédito por cada pago ${f}: <strong>${money(R2(m * t / 100))}</strong></span>` + aviso;
 }
 function updatePagoPreview() {
   const form = document.getElementById('f-pago');
@@ -627,6 +668,7 @@ document.addEventListener('click', async e => {
   const act = el.dataset.act, id = el.dataset.id;
   if (act === 'go') { state.view = el.dataset.view; state.armed = null; render(); }
   else if (act === 'open') { state.detailId = id; state.view = 'detalle'; state.armed = null; render(); }
+  else if (act === 'edit') { state.editId = id; state.view = 'editar'; state.armed = null; render(); }
   else if (act === 'pay') { state.payId = id; state.view = 'pago'; state.armed = null; render(); }
   else if (act === 'retry') { state.loadError = false; state.loaded = false; await entrar(); }
   else if (act === 'logout') {
@@ -660,7 +702,7 @@ document.addEventListener('click', async e => {
 });
 
 document.addEventListener('input', e => {
-  if (e.target.closest('#f-nuevo')) updateNuevoPreview();
+  if (e.target.closest('#f-nuevo') || e.target.closest('#f-editar')) updateNuevoPreview();
   if (e.target.closest('#f-pago')) updatePagoPreview();
 });
 document.addEventListener('change', e => {
@@ -668,7 +710,7 @@ document.addEventListener('change', e => {
     const l = loans.find(x => x.id === e.target.value);
     if (l) { state.payId = l.id; document.getElementById('p-redito').value = reditoPeriodo(l); document.getElementById('p-capital').value = 0; updatePagoPreview(); }
   }
-  if (e.target.closest('#f-nuevo')) updateNuevoPreview();
+  if (e.target.closest('#f-nuevo') || e.target.closest('#f-editar')) updateNuevoPreview();
   if (e.target.id === 'b-file') { const f = e.target.files && e.target.files[0]; e.target.value = ''; cargarRespaldo(f); }
 });
 
@@ -703,6 +745,18 @@ document.addEventListener('submit', async e => {
     if (!nombre || !(capital > 0 && capital < 1e12) || !(tasa >= 0 && tasa < 10000) || !f.fecha.value) { toast('Revisa los datos: nombre, monto y tasa son obligatorios.', true); return; }
     const ok = await crearPrestamo({ nombre, capital, tasa, frecuencia: f.frecuencia.value, fecha: f.fecha.value });
     if (ok) { state.view = 'inicio'; toast('Préstamo guardado.'); }
+    render();
+  } else if (f.id === 'f-editar') {
+    const l = loans.find(x => x.id === state.editId);
+    if (!l) return;
+    const nombre = f.nombre.value.trim();
+    const capital = R2(parseFloat(f.monto.value));
+    const tasa = parseFloat(f.tasa.value);
+    if (!nombre || !(capital > 0 && capital < 1e12) || !(tasa >= 0 && tasa < 10000) || !f.fecha.value) { toast('Revisa los datos: nombre, monto y tasa son obligatorios.', true); return; }
+    const pagadoCapital = R2(l.pagos.reduce((s, p) => s + p.capital, 0));
+    if (capital < pagadoCapital - 0.005) { toast('El monto no puede ser menor que lo ya abonado a capital (' + money(pagadoCapital) + ').', true); return; }
+    const ok = await editarPrestamo(l, { nombre, capital, tasa, frecuencia: f.frecuencia.value, fecha: f.fecha.value });
+    if (ok) { state.detailId = l.id; state.view = 'detalle'; toast('Cambios guardados.'); }
     render();
   } else if (f.id === 'f-pago') {
     const l = loans.find(x => x.id === f.prestamo.value);
